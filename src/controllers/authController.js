@@ -4,7 +4,8 @@ const { v4: uuidv4 } = require('uuid');
 const { users, refreshTokens, pkceStore } = require('../data/store');
 
 const githubLogin = async (req, res) => {
-  const { code, state, code_verifier } = req.body;
+  const { code, state, code_verifier, codeVerifier } = req.body;
+  const verifier = code_verifier || codeVerifier;
 
   if (!code) {
     return res.status(400).json({ error: 'Code is required' });
@@ -12,13 +13,12 @@ const githubLogin = async (req, res) => {
 
   try {
     // Exchange code for access token with GitHub
-    // Note: If using real PKCE with GitHub, we include code_verifier here.
     const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
       client_id: process.env.GITHUB_CLIENT_ID,
       client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
       redirect_uri: process.env.GITHUB_REDIRECT_URI,
-      code_verifier
+      code_verifier: verifier
     }, {
       headers: { Accept: 'application/json' }
     });
