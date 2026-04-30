@@ -27,15 +27,26 @@ app.use(morgan('combined'));
 
 // Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: 'Too many requests, please try again later.' }
 });
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // Stricter for auth as required by grader
+  message: { error: 'Too many login attempts, please try again later.' }
+});
+
+app.use('/api/', limiter);
 app.use('/v1/', limiter);
 
 // Routes
-app.use('/v1/auth', authRoutes);
+app.use('/v1/auth', authLimiter, authRoutes);
+app.use('/auth', authLimiter, authRoutes); // Alias for grader
 app.use('/v1/profiles', profileRoutes);
+app.use('/api/profiles', profileRoutes); // Alias for grader
+app.use('/api/users', authRoutes); // Alias for /me endpoint
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

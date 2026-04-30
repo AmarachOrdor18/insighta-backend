@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { verifyJWT } = require('../middleware/authMiddleware');
 
+router.get('/github', authController.initiateGitHubLogin);
 router.post('/github', authController.githubLogin);
 router.get('/github/callback', authController.githubCallback);
 router.post('/refresh', authController.refresh);
