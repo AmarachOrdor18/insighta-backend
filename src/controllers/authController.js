@@ -12,13 +12,13 @@ const githubLogin = async (req, res) => {
 
   try {
     // Exchange code for access token with GitHub
-    // Note: If using real PKCE with GitHub, we'd include code_verifier here.
-    // GitHub doesn't strictly require it if we have client_secret, but we'll include it for compliance if provided.
+    // Note: If using real PKCE with GitHub, we include code_verifier here.
     const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
       client_id: process.env.GITHUB_CLIENT_ID,
       client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
       redirect_uri: process.env.GITHUB_REDIRECT_URI,
+      code_verifier
     }, {
       headers: { Accept: 'application/json' }
     });
