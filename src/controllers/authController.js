@@ -169,8 +169,13 @@ const githubCallback = async (req, res) => {
       maxAge: 15 * 60 * 1000
     });
 
-    // Redirect to frontend dashboard
-    res.redirect(`${process.env.FRONTEND_URL}/?login=success`);
+    // Redirect to frontend dashboard or CLI
+    if (state && state.startsWith('cli_')) {
+      const port = state.split('_')[1] || '9876';
+      res.redirect(`http://localhost:${port}/callback?code=${code}&state=${state}`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/?login=success`);
+    }
   } catch (err) {
     console.error('Callback error:', err.message);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
