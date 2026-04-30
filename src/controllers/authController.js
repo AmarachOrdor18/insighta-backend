@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { users, refreshTokens, pkceStore } = require('../data/store');
@@ -79,8 +80,16 @@ const githubLogin = async (req, res) => {
 };
 
 const refresh = (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const { refreshToken } = req.body;
-  if (!refreshToken || !refreshTokens.has(refreshToken)) {
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token required' });
+  }
+
+  if (!refreshTokens.has(refreshToken)) {
     return res.status(401).json({ error: 'Invalid refresh token' });
   }
 
@@ -106,6 +115,10 @@ const refresh = (req, res) => {
 };
 
 const logout = (req, res) => {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   const { refreshToken } = req.body;
   if (refreshToken) refreshTokens.delete(refreshToken);
   res.clearCookie('accessToken');
@@ -119,25 +132,43 @@ const getMe = (req, res) => {
 };
 
 const initiateGitHubLogin = (req, res) => {
-  const state = Math.random().toString(36).substring(7);
-  // For PKCE in the browser flow, we'll use a simplified version since GitHub doesn't strictly enforce it for web apps without a client secret,
-  // but to satisfy the grader, we'll ensure state is present.
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GITHUB_REDIRECT_URI)}&state=${state}&scope=read:user`;
+  const state = crypto.randomBytes(16).toString('hex');
+  const code_verifier = crypto.randomBytes(32).toString('hex');
+  const code_challenge = crypto.createHash('sha256').update(code_verifier).digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+
+  // Store state and verifier in cookies for validation in the callback
+  res.cookie('oauth_state', state, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 5 * 60 * 1000 });
+  res.cookie('oauth_verifier', code_verifier, { httpOnly: true, secure: true, sameSite: 'none', maxAge: 5 * 60 * 1000 });
+
+  const authUrl = `https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GITHUB_REDIRECT_URI)}&state=${state}&scope=read:user&code_challenge=${code_challenge}&code_challenge_method=S256`;
   res.redirect(authUrl);
 };
 
 const githubCallback = async (req, res) => {
   const { code, state } = req.query;
+  const savedState = req.cookies.oauth_state;
+  const savedVerifier = req.cookies.oauth_verifier;
+
+  // Clear validation cookies
+  res.clearCookie('oauth_state');
+  res.clearCookie('oauth_verifier');
 
   if (!code || !state) {
     return res.status(400).json({ error: 'Missing code or state' });
   }
 
   // If this is a CLI flow, redirect the code to localhost immediately
-  // Do NOT exchange it here, as the CLI will do the exchange itself (PKCE)
-  if (state && state.startsWith('cli_')) {
+  if (state.startsWith('cli_')) {
     const port = state.split('_')[1] || '9876';
     return res.redirect(`http://localhost:${port}/callback?code=${code}&state=${state}`);
+  }
+
+  // Validate state for web flow
+  if (state !== savedState) {
+    return res.status(400).json({ error: 'Invalid state parameter' });
   }
 
   try {
@@ -146,6 +177,7 @@ const githubCallback = async (req, res) => {
       client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
       redirect_uri: process.env.GITHUB_REDIRECT_URI,
+      code_verifier: savedVerifier
     }, {
       headers: { Accept: 'application/json' }
     });
