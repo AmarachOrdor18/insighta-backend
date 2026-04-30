@@ -4,6 +4,7 @@ const authController = require('../controllers/authController');
 const { verifyJWT } = require('../middleware/authMiddleware');
 
 router.post('/github', authController.githubLogin);
+router.get('/github/callback', authController.githubCallback);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.get('/me', verifyJWT, authController.getMe);

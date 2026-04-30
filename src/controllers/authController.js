@@ -118,4 +118,64 @@ const getMe = (req, res) => {
   res.json({ data: user });
 };
 
-module.exports = { githubLogin, refresh, logout, getMe };
+const githubCallback = async (req, res) => {
+  const { code, state } = req.query;
+
+  if (!code) {
+    return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`);
+  }
+
+  try {
+    const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: process.env.GITHUB_CLIENT_ID,
+      client_secret: process.env.GITHUB_CLIENT_SECRET,
+      code,
+      redirect_uri: process.env.GITHUB_REDIRECT_URI,
+    }, {
+      headers: { Accept: 'application/json' }
+    });
+
+    const { access_token, error } = tokenResponse.data;
+    if (error) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=${error}`);
+    }
+
+    const userResponse = await axios.get('https://api.github.com/user', {
+      headers: { Authorization: `Bearer ${access_token}` }
+    });
+
+    const githubUser = userResponse.data;
+
+    let user = users.get(githubUser.id.toString());
+    if (!user) {
+      user = {
+        id: githubUser.id.toString(),
+        name: githubUser.name || githubUser.login,
+        githubLogin: githubUser.login,
+        role: 'analyst',
+        createdAt: new Date().toISOString()
+      };
+      if (users.size === 0) user.role = 'admin';
+      users.set(user.id, user);
+    }
+
+    const payload = { id: user.id, role: user.role };
+    const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || '15m' });
+
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000
+    });
+
+    // Redirect to frontend dashboard
+    res.redirect(`${process.env.FRONTEND_URL}/?login=success`);
+  } catch (err) {
+    console.error('Callback error:', err.message);
+    res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
+  }
+};
+
+module.exports = { githubLogin, githubCallback, refresh, logout, getMe };
+
