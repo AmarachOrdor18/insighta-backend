@@ -125,6 +125,13 @@ const githubCallback = async (req, res) => {
     return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_code`);
   }
 
+  // If this is a CLI flow, redirect the code to localhost immediately
+  // Do NOT exchange it here, as the CLI will do the exchange itself (PKCE)
+  if (state && state.startsWith('cli_')) {
+    const port = state.split('_')[1] || '9876';
+    return res.redirect(`http://localhost:${port}/callback?code=${code}&state=${state}`);
+  }
+
   try {
     const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
       client_id: process.env.GITHUB_CLIENT_ID,
@@ -169,13 +176,8 @@ const githubCallback = async (req, res) => {
       maxAge: 15 * 60 * 1000
     });
 
-    // Redirect to frontend dashboard or CLI
-    if (state && state.startsWith('cli_')) {
-      const port = state.split('_')[1] || '9876';
-      res.redirect(`http://localhost:${port}/callback?code=${code}&state=${state}`);
-    } else {
-      res.redirect(`${process.env.FRONTEND_URL}/?login=success`);
-    }
+    // Redirect to frontend dashboard
+    res.redirect(`${process.env.FRONTEND_URL}/?login=success`);
   } catch (err) {
     console.error('Callback error:', err.message);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=server_error`);
